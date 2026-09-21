@@ -41,6 +41,16 @@ jobs:
               with:
                   node-version: "20"
 
+            # bun is not preinstalled on the runner, so it has to be set up
+            # explicitly before the build steps can use it.
+            - name: Setup Bun
+              uses: oven-sh/setup-bun@v2
+              with:
+                  bun-version: latest
+
+            - name: Check Bun
+              run: bun --version
+
             # The lockfile is bun.lockb, so npm ci cannot be used here.
             - name: Install dependencies
               run: bun install --frozen-lockfile
