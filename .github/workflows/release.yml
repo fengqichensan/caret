@@ -1,33 +1,132 @@
-name: Release Obsidian plugin
+name: Auto Release
+
 on:
     push:
-        tags:
-            - "*"
+        branches:
+            - main
+    pull_request:
+        types: [closed]
+        branches:
+            - main
+
+permissions:
+    contents: write
+
+# Serialise runs. The version gate below already makes repeat runs harmless,
+# but without this two runs triggered at once could both decide to bump the
+# same version and race on the resulting commit.
+concurrency:
+    group: auto-release
+    cancel-in-progress: false
 
 jobs:
-    build:
+    release:
+        # Guard against a release loop. Bumping the version pushes a commit back
+        # to main, which would otherwise trigger this workflow again; that run
+        # would find its own freshly created tag, bump once more, and repeat
+        # forever. Skipping anything the bot itself pushed breaks the cycle.
+        if: github.actor != 'github-actions[bot]'
         runs-on: ubuntu-latest
 
         steps:
-            - uses: actions/checkout@v3
-
-            - name: Use Node.js
-              uses: actions/setup-node@v3
+            - name: Checkout repository
+              uses: actions/checkout@v4
               with:
-                  node-version: "18.x"
+                  fetch-depth: 0
+                  ref: main
+                  token: ${{ secrets.GITHUB_TOKEN }}
+
+            - name: Setup Node.js
+              uses: actions/setup-node@v4
+              with:
+                  node-version: "20"
+
+            # The lockfile is bun.lockb, so npm ci cannot be used here.
+            - name: Install dependencies
+              run: bun install --frozen-lockfile
 
             - name: Build plugin
-              run: |
-                  npm install
-                  npm run build
+              run: bun run build
 
-            - name: Create release
+            # Decides what this run releases. If the version in manifest.json has
+            # no tag yet it is released as is, which is the normal case when you
+            # bump the version yourself in the PR. Otherwise the patch number is
+            # bumped so that an ordinary push to main still produces a release.
+            - name: Check version and bump if needed
+              id: version
+              run: |
+                  set -euo pipefail
+
+                  CURRENT_VERSION=$(node -p "require('./manifest.json').version")
+                  echo "Version in manifest.json: ${CURRENT_VERSION}"
+
+                  if git rev-parse "v${CURRENT_VERSION}" >/dev/null 2>&1; then
+                    # This version was already released, so bump the patch number.
+                    IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT_VERSION"
+                    NEW_VERSION="${MAJOR}.${MINOR}.$((PATCH + 1))"
+                    echo "Tag v${CURRENT_VERSION} exists, bumping to ${NEW_VERSION}"
+
+                    # Keep every place that records the version in sync: the
+                    # manifest Obsidian reads, the package metadata, and the
+                    # caret_version shown in the settings tab.
+                    node -e '
+                      const fs = require("fs");
+                      const version = process.argv[1];
+
+                      const manifest = JSON.parse(fs.readFileSync("manifest.json", "utf8"));
+                      manifest.version = version;
+                      fs.writeFileSync("manifest.json", JSON.stringify(manifest, null, 4) + "\n");
+
+                      const pkg = JSON.parse(fs.readFileSync("package.json", "utf8"));
+                      pkg.version = version;
+                      fs.writeFileSync("package.json", JSON.stringify(pkg, null, 4) + "\n");
+
+                      const main = fs.readFileSync("main.ts", "utf8");
+                      const updated = main.replace(
+                        /(caret_version:\s*")[^"]+(")/,
+                        `$1${version}$2`
+                      );
+                      if (updated === main) {
+                        throw new Error("caret_version not found in main.ts");
+                      }
+                      fs.writeFileSync("main.ts", updated);
+                    ' "$NEW_VERSION"
+
+                    # bun records the package version in its lockfile, so
+                    # refresh it to keep future --frozen-lockfile installs happy.
+                    bun install --lockfile-only
+
+                    git config user.name "github-actions[bot]"
+                    git config user.email "github-actions[bot]@users.noreply.github.com"
+                    git add manifest.json package.json main.ts bun.lockb
+                    git commit -m "Bump version to ${NEW_VERSION}"
+                    git push origin main
+
+                    echo "VERSION=${NEW_VERSION}" >> "$GITHUB_OUTPUT"
+                  else
+                    echo "Tag v${CURRENT_VERSION} does not exist, releasing it as is"
+                    echo "VERSION=${CURRENT_VERSION}" >> "$GITHUB_OUTPUT"
+                  fi
+
+            # Commit first, then tag, so the tag points at the built commit
+            # rather than at the pre-bump state of the repository.
+            - name: Create and push tag
+              run: |
+                  set -euo pipefail
+                  git config user.name "github-actions[bot]"
+                  git config user.email "github-actions[bot]@users.noreply.github.com"
+                  git tag "v${{ steps.version.outputs.VERSION }}"
+                  git push origin "v${{ steps.version.outputs.VERSION }}"
+
+            - name: Create Release
+              uses: softprops/action-gh-release@v1
+              with:
+                  tag_name: v${{ steps.version.outputs.VERSION }}
+                  name: Release v${{ steps.version.outputs.VERSION }}
+                  generate_release_notes: true
+                  files: |
+                      main.js
+                      manifest.json
+                      styles.css
               env:
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-              run: |
-                  tag="${GITHUB_REF#refs/tags/}"
-
-                  gh release create "$tag" \
-                    --title="$tag" \
-                    --draft \
-                    main.js manifest.json styles.css

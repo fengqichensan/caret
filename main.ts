@@ -41,7 +41,7 @@ import { StreamTextResult, CoreTool } from "ai";
 import { createDeepSeek, DeepSeekProvider } from "@ai-sdk/deepseek";
 
 export const DEFAULT_SETTINGS: CaretPluginSettings = {
-    caret_version: "0.2.80",
+    caret_version: "0.3.0",
     chat_logs_folder: "caret/chats",
     chat_logs_date_format_bool: false,
     chat_logs_rename_bool: true,
