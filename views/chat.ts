@@ -112,26 +112,6 @@ export class FullPageChat extends ItemView {
         }
     }
 
-    async streamMessage(stream_response: AsyncIterable<any>) {
-        if (this.plugin.settings.llm_provider === "ollama") {
-            for await (const part of stream_response) {
-                this.conversation[this.conversation.length - 1].content += part.message.content;
-                if (this.chatComponentRef) {
-                    this.chatComponentRef.updateLastMessage(part.message.content);
-                }
-            }
-        }
-        if (this.plugin.settings.llm_provider === "openai" || "groq" || "custom") {
-            for await (const part of stream_response) {
-                const delta_content = part.choices[0]?.delta.content || "";
-                this.conversation[this.conversation.length - 1].content += delta_content;
-                if (this.chatComponentRef) {
-                    this.chatComponentRef.updateLastMessage(delta_content);
-                }
-            }
-        }
-    }
-
     focusAndPositionCursorInTextBox() {
         this.textBox.focus();
     }

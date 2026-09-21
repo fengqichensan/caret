@@ -7,15 +7,11 @@ import {
     isEligibleProvider,
     ai_sdk_completion,
     ai_sdk_structured,
-    ai_sdk_image_gen,
 } from "./llm_calls";
 
-// // @ts-ignore
-// import ollama from "ollama/browser";
 import { encodingForModel } from "js-tiktoken";
-import OpenAI from "openai";
 import { around } from "monkey-around";
-import { Canvas, ViewportNode, Message, Node, Edge, SparkleConfig, UnknownData, ImageModelOptions } from "./types";
+import { Canvas, ViewportNode, Message, Node, Edge, SparkleConfig, UnknownData } from "./types";
 import {
     MarkdownView,
     Modal,
@@ -33,25 +29,16 @@ import { CanvasFileData, CanvasNodeData, CanvasTextData } from "obsidian/canvas"
 // Import all of the views, components, models, etc
 import { CaretSettingTab } from "./settings";
 import { CMDJModal } from "./modals/inlineEditingModal";
-import { RemoveCustomModelModal } from "./modals/removeCustomModel";
 // import { ResearchModal } from "./modals/researcherModal";
 import { SystemPromptModal } from "./modals/systemPromptModal";
 import { redBackgroundField } from "./editorExtensions/inlineDiffs";
 import { NewNode, CaretPluginSettings } from "./types";
-import { CustomModelModal } from "./modals/addCustomModel";
 import { LinearWorkflowEditor } from "./views/workflowEditor";
 import { FullPageChat, VIEW_CHAT } from "./views/chat";
 import { CaretCanvas } from "./caret_canvas";
 const parseString = require("xml2js").parseString;
-import { createGoogleGenerativeAI, GoogleGenerativeAIProvider } from "@ai-sdk/google";
-import { createOpenAI, OpenAIProvider } from "@ai-sdk/openai";
 import { StreamTextResult, CoreTool } from "ai";
-import { AnthropicProvider, createAnthropic } from "@ai-sdk/anthropic";
-import { GroqProvider, createGroq } from "@ai-sdk/groq";
-import { createOllama, OllamaProvider } from "ollama-ai-provider";
-import { createOpenRouter, OpenRouterProvider } from "@openrouter/ai-sdk-provider";
-import { createOpenAICompatible, OpenAICompatibleProvider } from "@ai-sdk/openai-compatible";
-import { createXai, xai, XaiProvider } from "@ai-sdk/xai";
+import { createDeepSeek, DeepSeekProvider } from "@ai-sdk/deepseek";
 
 export const DEFAULT_SETTINGS: CaretPluginSettings = {
     caret_version: "0.2.80",
@@ -59,534 +46,68 @@ export const DEFAULT_SETTINGS: CaretPluginSettings = {
     chat_logs_date_format_bool: false,
     chat_logs_rename_bool: true,
     chat_send_chat_shortcut: "enter",
-    model: "gpt-4-turbo",
-    llm_provider: "openai",
-    openai_api_key: "",
-    groq_api_key: "",
-
-    anthropic_api_key: "",
-    open_router_key: "",
-    xai_api_key: "",
-    context_window: 128000,
-    custom_endpoints: {},
+    model: "deepseek-flash",
+    llm_provider: "deepseek",
+    deepseek_api_key: "",
+    context_window: 1000000,
     system_prompt: "",
     temperature: 1,
     llm_provider_options: {
-        openai: {
-            "gpt-4-turbo": {
-                name: "gpt-4-turbo",
-                context_window: 128000,
+        deepseek: {
+            "deepseek-flash": {
+                name: "DeepSeek Flash",
+                context_window: 1000000,
                 function_calling: true,
-                vision: true,
-                streaming: true,
-            },
-            "gpt-3.5-turbo": {
-                name: "gpt-3.5-turbo",
-                context_window: 128000,
-                function_calling: true,
-                vision: true,
-                streaming: true,
-            },
-            "gpt-4o": {
-                name: "gpt-4o",
-                context_window: 128000,
-                function_calling: true,
-                vision: true,
-                streaming: true,
-            },
-            "gpt-4o-mini": {
-                name: "gpt-4o-mini",
-                context_window: 128000,
-                function_calling: true,
-                vision: true,
-                streaming: true,
-            },
-            "chatgpt-4o-latest": {
-                name: "ChatGPT-4O Latest",
-                context_window: 128000,
-                function_calling: true,
-                vision: true,
-                streaming: true,
-            },
-            "o1-preview": {
-                name: "o1-preview",
-                context_window: 128000,
-                function_calling: false,
-                vision: false,
-                streaming: false,
-            },
-            "o1-mini": {
-                name: "o1-mini",
-                context_window: 128000,
-                function_calling: false,
-                vision: false,
-                streaming: false,
-            },
-            o1: {
-                name: "o1",
-                context_window: 200000,
-                function_calling: false,
-                vision: false,
-                streaming: false,
-            },
-            "o3-mini": {
-                name: "o3-mini",
-                context_window: 200000,
-                function_calling: false,
-                vision: false,
-                streaming: false,
-            },
-            o3: {
-                name: "o3",
-                context_window: 200000,
-                function_calling: true,
-                vision: true,
-                streaming: true,
-            },
-            "o4-mini": {
-                name: "o4-mini",
-                context_window: 200000,
-                function_calling: true,
-                vision: true,
-                streaming: true,
-            },
-            "gpt-5": {
-                name: "GPT-5",
-                context_window: 400000,
-                function_calling: true,
-                vision: true,
-                streaming: true,
-            },
-            "gpt-5-mini": {
-                name: "GPT-5 Mini",
-                context_window: 400000,
-                function_calling: true,
-                vision: true,
-                streaming: true,
-            },
-            "gpt-5-nano": {
-                name: "GPT-5 Nano",
-                context_window: 400000,
-                function_calling: true,
-                vision: true,
-                streaming: true,
-            },
-            "gpt-5-chat-latest": {
-                name: "GPT-5 Chat Latest",
-                context_window: 400000,
-                function_calling: true,
-                vision: true,
-                streaming: true,
-            },
-        },
-        groq: {
-            "llama3-8b-8192": {
-                name: "Llama 8B",
-                context_window: 8192,
-                function_calling: false,
+                // The model itself accepts images, but caret has no image input
+                // path, so vision stays disabled.
                 vision: false,
                 streaming: true,
             },
-            "llama3-70b-8192": {
-                name: "Llama 70B",
-                context_window: 8192,
-                function_calling: false,
-                vision: false,
-                streaming: true,
-            },
-            "mixtral-8x7b-32768": {
-                name: "Mixtral 8x7b",
-                context_window: 32768,
-                function_calling: false,
-                vision: false,
-                streaming: true,
-            },
-            "gemma-7b-it": {
-                name: "Gemma 7B",
-                context_window: 8192,
-                function_calling: false,
-                vision: false,
-                streaming: true,
-            },
-            // In preview, not accessiable yet
-            "llama-3.1-8b-instant": {
-                name: "llama 3.1 8B Instant (Preview)",
-                context_window: 8000,
+            "deepseek-v4-pro": {
+                name: "DeepSeek V4 Pro",
+                context_window: 1000000,
                 function_calling: true,
-                vision: true,
-                streaming: true,
-            },
-            "llama-3.1-70b-versatile": {
-                name: "llama 3.1 70B Versatile (Preview)",
-                context_window: 8000,
-                function_calling: true,
-                vision: true,
-                streaming: true,
-            },
-        },
-        anthropic: {
-            "claude-sonnet-4-5": {
-                name: "Claude Sonnet 4.5",
-                context_window: 200000,
-                function_calling: true,
-                vision: true,
-                streaming: true,
-            },
-            "claude-haiku-4-5": {
-                name: "Claude Haiku 4.5",
-                context_window: 200000,
-                function_calling: true,
-                vision: true,
-                streaming: true,
-            },
-            "claude-opus-4-1": {
-                name: "Claude Opus 4.1",
-                context_window: 200000,
-                function_calling: true,
-                vision: true,
-                streaming: true,
-            },
-            "claude-opus-4-0": {
-                name: "Claude Opus 4.0",
-                context_window: 200000,
-                function_calling: true,
-                vision: true,
-                streaming: true,
-            },
-            "claude-sonnet-4-0": {
-                name: "Claude Sonnet 4.0",
-                context_window: 200000,
-                function_calling: true,
-                vision: true,
-                streaming: true,
-            },
-            "claude-3-5-sonnet-20240620": {
-                name: "Claude 3.5 Sonnet",
-                context_window: 200000,
-                function_calling: true,
-                vision: true,
-                streaming: true,
-            },
-            "claude-3-opus-20240229": {
-                name: "Claude 3 Opus",
-                context_window: 200000,
-                function_calling: true,
-                vision: true,
-                streaming: true,
-            },
-            "claude-3-sonnet-20240229": {
-                name: "Claude 3 Sonnet",
-                context_window: 200000,
-                function_calling: true,
-                vision: true,
-                streaming: true,
-            },
-
-            "claude-3-haiku-20240307": {
-                name: "Claude 3 Haiku",
-                context_window: 200000,
-                function_calling: true,
-                vision: true,
-                streaming: true,
-            },
-        },
-        openrouter: {
-            "anthropic/claude-3-opus": {
-                name: "Claude 3 Opus",
-                context_window: 200000,
-                function_calling: true,
-                vision: true,
-                streaming: true,
-            },
-            "anthropic/claude-3-sonnet": {
-                name: "Claude 3 Sonnet",
-                context_window: 200000,
-                function_calling: true,
-                vision: true,
-                streaming: true,
-            },
-            "anthropic/claude-3.5-sonnet": {
-                name: "Claude 3.5 Sonnet",
-                context_window: 200000,
-                function_calling: true,
-                vision: true,
-                streaming: true,
-            },
-            "anthropic/claude-3-haiku": {
-                name: "Claude 3 Haiku",
-                context_window: 200000,
-                function_calling: true,
-                vision: true,
-                streaming: true,
-            },
-            "google/gemini-flash-1.5": {
-                name: "Gemini Flash 1.5",
-                context_window: 2800000,
-                function_calling: true,
-                vision: true,
-                streaming: true,
-            },
-            "google/gemini-pro-1.5": {
-                name: "Gemini Pro 1.5",
-                context_window: 2800000,
-                function_calling: true,
-                vision: true,
-                streaming: true,
-            },
-            "google/gemini-flash-1.5-exp": {
-                name: "Gemini Flash 1.5 Experimental",
-                context_window: 4000000,
-                function_calling: true,
-                vision: true,
-                streaming: true,
-            },
-            "meta-llama/llama-3.1-405b-instruct": {
-                name: "Llama3.1 405B Instruct",
-                context_window: 131072,
-                function_calling: true,
-                vision: true,
-                streaming: true,
-            },
-            "meta-llama/llama-3.1-8b-instruct": {
-                name: "Llama3.1 8B Instruct",
-                context_window: 100000,
-                function_calling: true,
-                vision: true,
-                streaming: true,
-            },
-            "meta-llama/llama-3.1-70b-instruct": {
-                name: "Llama3.1 70B Instruct",
-                context_window: 100000,
-                function_calling: true,
-                vision: true,
-                streaming: true,
-            },
-        },
-        ollama: {
-            "llama3.1": {
-                name: "llama3.1 8B",
-                context_window: 131072,
-                function_calling: false,
-                vision: false,
-                streaming: true,
-            },
-            llama3: {
-                name: "llama3 8B",
-                context_window: 8192,
-                function_calling: false,
-                vision: false,
-                streaming: true,
-            },
-            "llama3.2:1b": {
-                name: "llama3.2 1B",
-                context_window: 131072,
-                function_calling: false,
-                vision: false,
-                streaming: true,
-            },
-            "llama3.2:3b": {
-                name: "llama3.2 3B",
-                context_window: 131072,
-                function_calling: false,
-                vision: false,
-                streaming: true,
-            },
-            phi3: {
-                name: "Phi-3 3.8B",
-                context_window: 8192,
-                function_calling: false,
-                vision: false,
-                streaming: true,
-            },
-            mistral: {
-                name: "Mistral 7B",
-                context_window: 32768,
-                function_calling: false,
-                vision: false,
-                streaming: true,
-            },
-            gemma: {
-                name: "Gemma 7B",
-                context_window: 8192,
-                function_calling: false,
-                vision: false,
-                streaming: true,
-            },
-            gemma2: {
-                name: "Gemma 2",
-                context_window: 8192,
-                function_calling: false,
-                vision: false,
-                streaming: true,
-            },
-            "deepseek-r1:1.5b": {
-                name: "DeepSeek r1 1.5B",
-                context_window: 131072,
-                function_calling: false,
-                vision: false,
-                streaming: true,
-            },
-
-            "deepseek-r1:8b": {
-                name: "DeepSeek r1 8B",
-                context_window: 131072,
-                function_calling: false,
-                vision: false,
-                streaming: true,
-            },
-            "deepseek-r1:14b": {
-                name: "DeepSeek r1 14B",
-                context_window: 131072,
-                function_calling: false,
-                vision: false,
-                streaming: true,
-            },
-            "deepseek-r1:32b": {
-                name: "DeepSeek r1 32B",
-                context_window: 131072,
-                function_calling: false,
-                vision: false,
-                streaming: true,
-            },
-        },
-        custom: {},
-        google: {
-            "gemini-2.5-pro": {
-                name: "Gemini 2.5 Pro",
-                context_window: 1048576,
-                function_calling: true,
-                vision: true,
-                streaming: true,
-            },
-            "gemini-2.5-flash": {
-                name: "Gemini 2.5 Flash",
-                context_window: 1048576,
-                function_calling: true,
-                vision: true,
-                streaming: true,
-            },
-            "gemini-2.5-flash-lite": {
-                name: "Gemini 2.5 Flash Lite",
-                context_window: 1048576,
-                function_calling: true,
-                vision: true,
-                streaming: true,
-            },
-            "gemini-2.0-flash": {
-                name: "Gemini 2.0 Flash",
-                context_window: 1048576,
-                function_calling: true,
-                vision: true,
-                streaming: true,
-            },
-            "gemini-2.0-flash-lite-preview-02-05": {
-                name: "Gemini 2.0 Flash Lite Preview",
-                context_window: 1048576,
-                function_calling: true,
-                vision: true,
-                streaming: true,
-            },
-            "gemini-2.0-pro-exp-02-05": {
-                name: "Gemini 2.0 Pro Exp (Rate Limited)",
-                context_window: 1048576,
-                function_calling: true,
-                vision: true,
-                streaming: true,
-            },
-            "gemini-1.5-pro": {
-                name: "Gemini 1.5 Pro",
-                context_window: 800000,
-                function_calling: true,
-                vision: true,
-                streaming: true,
-            },
-            "gemini-1.5-flash": {
-                name: "Gemini 1.5 Flash",
-                context_window: 400000,
-                function_calling: true,
-                vision: true,
-                streaming: true,
-            },
-        },
-        perplexity: {
-            "llama-3.1-sonar-small-128k-online": {
-                name: "Sonar Small",
-                context_window: 127072,
-                function_calling: false,
-                vision: false,
-                streaming: true,
-            },
-            "llama-3.1-sonar-large-128k-online": {
-                name: "Sonar Large",
-                context_window: 127072,
-                function_calling: false,
-                vision: false,
-                streaming: true,
-            },
-            "llama-3.1-sonar-huge-128k-online": {
-                name: "Sonar Huge",
-                context_window: 127072,
-                function_calling: false,
                 vision: false,
                 streaming: true,
             },
         },
     },
     provider_dropdown_options: {
-        openai: "OpenAI",
-        groq: "Groq",
-        ollama: "Ollama",
-        anthropic: "Anthropic",
-        openrouter: "OpenRouter",
-        custom: "Custom",
-        google: "Google Gemini",
-        perplexity: "Perplexity",
+        deepseek: "DeepSeek",
     },
     include_nested_block_refs: true,
-    google_api_key: "",
-    perplexity_api_key: "",
-    image_model: "dall-e-3",
-    image_provider: "openai",
-    image_model_options: {
-        openai: {
-            "gpt-image-1": {
-                name: "GPT Image 1",
-                supported_sizes: ["1024x1024", "1536x1024", "1024x1536"],
-            },
-            "dall-e-3": {
-                name: "DALL-E 3",
-                supported_sizes: ["1024x1024", "1792x1024", "1024x1792"],
-            },
-        },
-        xai: {
-            "grok-2-image": {
-                name: "Grok 2 Image",
-                supported_sizes: ["1024x768"],
-            },
-        },
-    },
-    image_provider_dropdown_options: {
-        openai: "OpenAI",
-        xai: "xAI Grok",
-    },
 };
+
+/**
+ * Settings keys written by older plugin versions that no longer exist.
+ *
+ * They belong to the removed providers (API keys, custom OpenAI-compatible
+ * endpoints) and to the removed image-generation feature. They are deleted
+ * from stored settings on load so they do not linger in data.json.
+ */
+const REMOVED_SETTINGS_KEYS = [
+    "openai_api_key",
+    "groq_api_key",
+    "anthropic_api_key",
+    "open_router_key",
+    "xai_api_key",
+    "google_api_key",
+    "perplexity_api_key",
+    "custom_endpoints",
+    "image_model",
+    "image_provider",
+    "image_model_options",
+    "image_provider_dropdown_options",
+];
 
 export default class CaretPlugin extends Plugin {
     settings: CaretPluginSettings;
     canvas_patched: boolean = false;
     selected_node_colors: any = {};
     color_picker_open_on_last_click: boolean = false;
-    openai_client: OpenAIProvider;
-    groq_client: GroqProvider;
-    anthropic_client: AnthropicProvider;
-    ollama_client: OllamaProvider;
-    openrouter_client: OpenRouterProvider;
+    deepseek_client: DeepSeekProvider;
     encoder: any;
     pdfjs: any;
-    google_client: GoogleGenerativeAIProvider;
-    custom_client: OpenAICompatibleProvider | undefined | null;
-    perplexity_client: OpenAICompatibleProvider;
-    xai_client: XaiProvider;
 
     async onload() {
         // Initalize extra icons
@@ -602,63 +123,12 @@ export default class CaretPlugin extends Plugin {
         await this.loadSettings();
 
         // Initialize API clients
-        if (this.settings.openai_api_key) {
-            this.openai_client = createOpenAI({ apiKey: this.settings.openai_api_key });
+        if (this.settings.deepseek_api_key) {
+            this.deepseek_client = createDeepSeek({ apiKey: this.settings.deepseek_api_key });
         }
-        if (this.settings.groq_api_key) {
-            this.groq_client = createGroq({ apiKey: this.settings.groq_api_key });
-        }
-        if (this.settings.anthropic_api_key) {
-            this.anthropic_client = createAnthropic({
-                apiKey: this.settings.anthropic_api_key,
-                headers: {
-                    "anthropic-dangerous-direct-browser-access": "true",
-                },
-            });
-        }
-
-        if (this.settings.open_router_key) {
-            this.openrouter_client = createOpenRouter({
-                apiKey: this.settings.open_router_key,
-            });
-        }
-
-        if (this.settings.google_api_key) {
-            this.google_client = createGoogleGenerativeAI({
-                apiKey: this.settings.google_api_key,
-                // dangerouslyAllowBrowser: true,
-            });
-        }
-
-        if (this.settings.perplexity_api_key) {
-            this.perplexity_client = createOpenAICompatible({
-                apiKey: this.settings.perplexity_api_key,
-                baseURL: "https://api.perplexity.ai/",
-                name: "perplexity",
-            });
-        }
-
-        if (this.settings.xai_api_key) {
-            this.xai_client = createXai({
-                apiKey: this.settings.xai_api_key,
-            });
-        }
-
-        // SEt up Ollama
-        this.ollama_client = createOllama();
-        this.custom_client = undefined;
 
         // Initialize settings dab.
         this.addSettingTab(new CaretSettingTab(this.app, this));
-
-        // Add Commands.
-        this.addCommand({
-            id: "add-custom-models",
-            name: "Add custom models",
-            callback: () => {
-                new CustomModelModal(this.app, this).open();
-            },
-        });
 
         // Add Commands.
         this.addCommand({
@@ -670,13 +140,6 @@ export default class CaretPlugin extends Plugin {
             },
         });
 
-        this.addCommand({
-            id: "remove-custom-models",
-            name: "Remove custom models",
-            callback: () => {
-                new RemoveCustomModelModal(this.app, this).open();
-            },
-        });
         this.addCommand({
             id: "set-system-prompt",
             name: "Set system prompt",
@@ -2220,162 +1683,6 @@ version: 1
                         },
                     },
                     {
-                        name: "Generate Image",
-                        icon: "lucide-image",
-                        tooltip: "Generate image from prompt and create file node",
-                        callback: async () => {
-                            try {
-                                // Get the prompt from the node text
-                                const prompt = node.text || node.unknownData.text || "";
-                                if (!prompt.trim()) {
-                                    new Notice("No prompt found in node text!");
-                                    return;
-                                }
-
-                                new Notice("Generating image...");
-
-                                // Generate the image using selected provider and model
-                                const imageProvider = this.getImageProvider();
-                                if (!imageProvider) {
-                                    new Notice(`Image provider ${this.settings.image_provider} not configured!`);
-                                    return;
-                                }
-                                new Notice(`Using model: ${this.settings.image_model}`);
-
-                                const base64 = await ai_sdk_image_gen({
-                                    prompt,
-                                    provider: imageProvider,
-                                    model: this.settings.image_model,
-                                });
-
-                                // Create filename from first 4 words of prompt
-                                const words = prompt.trim().split(/\s+/).slice(0, 4);
-                                const baseName = words
-                                    .join("_")
-                                    .toLowerCase()
-                                    .replace(/[^a-zA-Z0-9_]/g, "");
-                                const ext = ".png";
-
-                                // Ensure caret-images folder exists
-                                const imageFolder = "caret-images";
-                                const folder = this.app.vault.getAbstractFileByPath(imageFolder);
-                                if (!folder) {
-                                    await this.app.vault.createFolder(imageFolder);
-                                }
-
-                                // Find unique filename
-                                let fileName = `${baseName}${ext}`;
-                                let filePath = `${imageFolder}/${fileName}`;
-                                let counter = 1;
-                                let fileExistsCheck = this.app.vault.getFileByPath(filePath);
-                                while (fileExistsCheck) {
-                                    fileName = `${baseName}_${counter}${ext}`;
-                                    filePath = `${imageFolder}/${fileName}`;
-                                    fileExistsCheck = this.app.vault.getFileByPath(filePath);
-                                    counter++;
-                                }
-
-                                // Save the image file
-                                await this.app.vault.createBinary(filePath, base64 as unknown as ArrayBuffer);
-                                const fileObj = this.app.vault.getFileByPath(filePath);
-
-                                if (!fileObj) {
-                                    new Notice("Failed to save image file!");
-                                    return;
-                                }
-
-                                new Notice("Image generated! Creating file node...");
-
-                                // Create file node on canvas
-                                let success = false;
-
-                                // Method 1: Try using canvas.createFileNode with proper file object
-                                if (!success && typeof canvas.createFileNode === "function") {
-                                    const fileNodeConfig = {
-                                        pos: { x: node.x + node.width + 50, y: node.y },
-                                        size: { width: 400, height: 300 },
-                                        file: fileObj,
-                                    };
-                                    try {
-                                        const newFileNode = canvas.createFileNode(fileNodeConfig);
-                                        success = true;
-                                    } catch (e) {
-                                        console.error("createFileNode failed:", e);
-                                    }
-                                }
-
-                                // Method 2: Try using addNodeToCanvas with file object (fallback)
-                                if (!success) {
-                                    try {
-                                        const fileNodeData = await this.addNodeToCanvas(
-                                            canvas,
-                                            this.generateRandomId(16),
-                                            {
-                                                x: node.x + node.width + 50,
-                                                y: node.y,
-                                                width: 400,
-                                                height: 300,
-                                                type: "file",
-                                                content: fileObj.path,
-                                            }
-                                        );
-
-                                        // Set the proper file object on the canvas node
-                                        const canvasNode = canvas.nodes?.get(fileNodeData?.id!);
-                                        if (canvasNode) {
-                                            canvasNode.file = fileObj;
-                                        }
-                                        success = true;
-                                    } catch (e) {
-                                        console.error("addNodeToCanvas failed:", e);
-                                    }
-                                }
-
-                                // Method 3: Try direct canvas.importData with file object (last resort)
-                                if (!success) {
-                                    try {
-                                        const canvas_data = canvas.getData();
-                                        const fileNodeDirect = {
-                                            id: this.generateRandomId(16),
-                                            x: node.x + node.width + 50,
-                                            y: node.y,
-                                            width: 400,
-                                            height: 300,
-                                            type: "file",
-                                            file: fileObj.path,
-                                        };
-
-                                        canvas.importData({
-                                            nodes: [...canvas_data.nodes, fileNodeDirect],
-                                            edges: canvas_data.edges,
-                                        });
-
-                                        // After import, set the proper file object
-                                        const canvasNode = canvas.nodes?.get(fileNodeDirect.id);
-                                        if (canvasNode) {
-                                            canvasNode.file = fileObj;
-                                        }
-
-                                        success = true;
-                                    } catch (e) {
-                                        console.error("importData method failed:", e);
-                                    }
-                                }
-
-                                if (success) {
-                                    new Notice("Image generated and file node created!");
-                                } else {
-                                    new Notice("Image generated but failed to create file node!");
-                                }
-
-                                canvas.requestFrame();
-                            } catch (error) {
-                                console.error("Image generation failed:", error);
-                                new Notice(`Image generation failed: ${error.message}`);
-                            }
-                        },
-                    },
-                    {
                         name: "Clear Role",
                         // icon: "lucide-message-circle-off",
                         icon: "lucide-user-x",
@@ -3413,15 +2720,11 @@ version: 1
             }
         }
         node.width = 510;
+        // Only the answer is streamed into the node. DeepSeek's thinking mode
+        // emits its chain of thought as separate reasoning parts, which the AI
+        // SDK keeps out of textStream, so CoT never reaches the canvas.
         for await (const textPart of stream.textStream) {
-            const current_text = node.text;
-            let processed_text = textPart;
-            if (textPart === "<think>") {
-                processed_text = "<|think>";
-            } else if (textPart.trim() === "</think>") {
-                processed_text = "<|/think>";
-            }
-            const new_content = `${current_text}${processed_text}`;
+            const new_content = `${node.text}${textPart}`;
             const word_count = new_content.split(/\s+/).length;
             const number_of_lines = Math.ceil(word_count / 7);
             if (word_count > 500) {
@@ -3632,22 +2935,55 @@ version: 1
 
     onunload() {}
 
+    /**
+     * Migrates settings written by older plugin versions.
+     *
+     * Providers other than DeepSeek were removed, so any stored provider name
+     * that is no longer supported (plus the model, key, custom endpoint and
+     * image settings that belonged to those providers) is dropped here.
+     * Without this the settings tab would index the model table with an
+     * unknown provider and throw.
+     *
+     * @returns The settings keys that were removed or rewritten.
+     */
+    migrateSettings(): string[] {
+        const settings = this.settings as unknown as Record<string, unknown>;
+        const removed_keys: string[] = [];
+
+        for (const key of REMOVED_SETTINGS_KEYS) {
+            if (key in settings) {
+                delete settings[key];
+                removed_keys.push(key);
+            }
+        }
+
+        const migrated = () => {
+            this.settings.llm_provider = DEFAULT_SETTINGS.llm_provider;
+            this.settings.model = DEFAULT_SETTINGS.model;
+            this.settings.context_window = DEFAULT_SETTINGS.context_window;
+            removed_keys.push("llm_provider");
+        };
+
+        // An unknown provider, or a fallback provider that is missing its model.
+        if (!isEligibleProvider(this.settings.llm_provider)) {
+            migrated();
+        } else if (!this.settings.llm_provider_options?.[this.settings.llm_provider]?.[this.settings.model]) {
+            this.settings.model = DEFAULT_SETTINGS.model;
+            this.settings.context_window = DEFAULT_SETTINGS.context_window;
+            removed_keys.push("model");
+        }
+
+        return removed_keys;
+    }
+
     async loadSettings() {
         this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+        if (this.migrateSettings().length > 0) {
+            await this.saveSettings();
+        }
     }
 
     async saveSettings() {
         await this.saveData(this.settings);
-    }
-
-    getImageProvider() {
-        switch (this.settings.image_provider) {
-            case "openai":
-                return this.openai_client;
-            case "xai":
-                return this.xai_client;
-            default:
-                return null;
-        }
     }
 }

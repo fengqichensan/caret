@@ -113,26 +113,10 @@ export interface Models {
     vision: boolean;
     streaming: boolean;
 }
-export interface CustomModels extends Models {
-    endpoint: string;
-    api_key: string;
-    known_provider: string;
-}
 
 export interface LLMProviderOptions {
     [key: string]: {
         [model: string]: Models;
-    };
-}
-
-export interface ImageModel {
-    name: string;
-    supported_sizes: string[];
-}
-
-export interface ImageModelOptions {
-    [key: string]: {
-        [model: string]: ImageModel;
     };
 }
 
@@ -159,24 +143,11 @@ export interface CaretPluginSettings {
     chat_send_chat_shortcut: string;
     model: string;
     llm_provider: string;
-    openai_api_key: string;
-    groq_api_key: string;
-
-    open_router_key: string;
-    anthropic_api_key: string;
-    xai_api_key: string;
+    deepseek_api_key: string;
     context_window: number;
-    custom_endpoints: { [model: string]: CustomModels };
     system_prompt: string;
     temperature: number;
     llm_provider_options: LLMProviderOptions;
     provider_dropdown_options: { [key: string]: string };
     include_nested_block_refs: boolean;
-    google_api_key: string;
-    perplexity_api_key: string;
-
-    image_model: string;
-    image_provider: string;
-    image_model_options: ImageModelOptions;
-    image_provider_dropdown_options: { [key: string]: string };
 }
